@@ -1,0 +1,103 @@
+ 数据库相关内容说明
+
+ 数据库类型：mysql
+ 操作系统：mac（如果存在不兼容的情况，请自行调整）
+ 数据库可视化平台：Navicat Premium
+
+ 该数据用于收集知乎指定话题下的问题，以及问题所对应的所有回答信息
+ 因此，该数据库包括两个主要表（还具有三个分类的表，之后在附录部分介绍）
+
+ 由于本项目针对于知乎中的新冠肺炎相关的话题，因此对于表名称中具有"COVID"，使用过程中，
+ 可以按照具体情况进行修改
+
+ table1 ： COVID_question
+ table2 ： COVID_question_answer
+
+ [建表的SQL语句] PS:为减少爬取过程中数据类型造成的不兼容，因此均看做字符串处理，在后续数据处理过程中，再进行进一步分析
+ table1：
+ create table COVID_question(
+     id VARCHAR(50) PRIMARY KEY, # 问题对应ID
+	 title VARCHAR(100), # 问题大标题
+	 answer_count VARCHAR(10), # 对应的回答数量
+	 comment_count varchar(10), # 问题的评论数量
+	 follower_count VARCHAR(10), # 问题的关注者数量
+	 type VARCHAR(50), # 类型（目的为选择question类型）
+	 question_type VARCHAR(50), # 问题的类型
+	 object_url VARCHAR(200), # 问题对应的url
+	 author_name VARCHAR(50), # 问题创作者姓名
+	 author_gender VARCHAR(10), # 问题创作者性别
+	 author_headline VARCHAR(50), # 问题创作者个性标签
+	 is_advertiser VARCHAR(10), # 是否为广告商
+	 author_edu_member_tag VARCHAR(50) # 问题创作者的教育标签
+);
+
+ table2：
+ create table COVID_question_answer(
+    answer_id varchar(30) PRIMARY key, # 回答对应ID
+    create_time varchar(30), # 回答第一次创建时间
+    update_time varchar(30), # 回答最后一次更新时间（截止到爬虫时间）
+    excerpt text, # 回答的简要概述（并不全面，超过200字的会只取前200字）
+    vote_number varchar(30), # 回答的点赞数
+    comment_number varchar(30), # 回答的评论数
+    author_name varchar(30), # 回答作者的昵称
+    author_headline varchar(100), # 回答作者得到个性签名
+    good_certification_description varchar(30), # 回答作者优秀回答者认证
+    certification_description varchar(30), # 回答作者实名认证
+    question_id varchar(30), # 回答所对应问题的ID（此处为了减少修改时的麻烦，并没有进行外键连接）
+    question_title varchar(100) # 回答对应的问题大标题（同上）
+ );
+
+ [table1 更新SQL语句] PS：后续添加的table中的信息（由于部分信息无法通过话题ID访问获取，因此这部分需要二次爬虫）
+ 这部分内容的爬取过程对应函数操作的第二条（若不需要此部分信息，可以跳过第二条函数操作）
+ ALTER TABLE COVID_question ADD COLUMN label VARCHAR(200) after title; # 知乎给问题给予的标签
+ ALTER TABLE COVID_question ADD COLUMN like_count VARCHAR(10) after follower_count; # 问题点赞量
+ ALTER TABLE COVID_question ADD COLUMN look_count VARCHAR(10) after like_count; # 问题浏览量
+ ALTER TABLE COVID_question ADD COLUMN question_create_time VARCHAR(50) after look_count; # 问题创建时间
+
+ database类中提供的操作：
+ 1.  插入操作[插入table1 、插入table2]
+ 2.  更新操作
+ 3.  选择操作
+
+ 具体操作对应的函数操作：
+ 1. 通过检索话题ID，获取所有问题的基本信息，并插入到table1中
+    - 函数句柄：function_name = insertDB_COVID_question
+    - 内含sql语句：["insert into COVID_question(id ,title, answer_count, comment_count ,follower_count ,type ,question_type,object_url ,author_name ,author_gender,author_headline,is_advertiser,author_edu_member_tag) " \
+              "values ('%s','%s','%s','%s','%s','%s','%s','%s','%s','%s','%s','%s','%s')"%(id ,title, answer_count, comment_count ,follower_count ,type ,question_type,object_url ,
+              author_name ,author_gender,author_headline,is_advertiser,author_edu_member_tag)]
+
+ 2. 通过检索已有问题的ID，获取一个问题下面所有的回答，并插入到table2中
+    - 函数句柄：function_name = insertDB_COVID_question_answer
+    - 内含sql语句：["insert into COVID_question_answer (answer_id,create_time,update_time ,excerpt," \
+                  "vote_number,comment_number,author_name,author_headline,good_certification_description," \
+                  "certification_description,question_id, question_title) " \
+                  "VALUES('%s','%s','%s','%s','%s','%s','%s','%s','%s','%s','%s','%s')" % \
+                  (answer_id,create_time,update_time ,excerpt,vote_number,comment_number,
+                  author_name,author_headline,good_certification_description,certification_description,
+                  question_id, question_title)]
+
+ 3. 通过获取已有问题的ID，对更新的table1中的信息进行爬取，并更新到table1中
+    ..插入标签（label）：
+     - 函数句柄：function_name = insertDB_label
+     - 内含sql语句：[update COVID_question set label = %s where id = %s]
+    ..插入点赞量（like_count）：
+     - 函数句柄：function_name = insertDB_like_count
+     - 内含sql语句：[update COVID_question set like_count = %s where id = %s]
+    ..插入浏览量（look_count）：
+     - 函数句柄：function_name = insertDB_look_count
+     - 内含sql语句：[update COVID_question set look_count = %s where id = %s]
+    ..插入创建时间（question_create_time）：
+     - 函数句柄：function_name = insertDB_question_create_time
+     - 内含sql语句：[update COVID_question set question_create_time = %s where id = %s]
+    ..集体插入（insertDB_update）：
+     - 函数句柄：function_name = insertDB_update
+     - 内含sql语句：[update COVID_question set label = %s, like_count = %s, look_count = %s, question_create_time = %s where id = %s]
+
+ 4. 选择操作：
+    .. 选择问题的ID： PS： 用于添加问题的回答信息
+    - 函数句柄：function_name = getQuestionId_Answer
+    - 内含sql语句：["select id from COVID_question where id not in (select DISTINCT(question_id) from COVID_question_answer)"]
+    .. 选择问题的ID： PS： 用于添加问题的更多信息
+    - 函数句柄：function_name = getId_MoreInfo
+    - 内含sql语句：["select id from COVID_question where question_create_time is null"]
+    [为保证在程序中断的情况下，不重新开始更新。则只选择没有插入信息的问题]
